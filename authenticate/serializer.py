@@ -102,10 +102,3 @@ class UserUpdateProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = '__all__'
-
-class TokenSerializer(serializers.Serializer):
-    user = serializers.CharField()
-    access_token = serializers.CharField()
-    # refresh_token = serializers.CharField()
-
-

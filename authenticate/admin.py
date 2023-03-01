@@ -8,6 +8,3 @@ from authenticate.models import *
 
 admin.site.register(Profile)
 
-
-
-admin.site.register(TokenUser)

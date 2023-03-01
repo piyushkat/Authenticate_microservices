@@ -1,18 +1,15 @@
-import jwt
 import environ
 import datetime
-import environ
-from authenticate.helper import *
-from authenticate.serializer import *
-from django.utils import timezone
 from rest_framework import status
+from authenticate.helper import *
+from django.utils import timezone
+from authenticate.serializer import *
 from django.core.mail import send_mail
 from datetime import datetime, timedelta
-from django.contrib.auth import authenticate
 from rest_framework.response import Response
+from django.contrib.auth import authenticate
 from rest_framework.generics import GenericAPIView
 from django.contrib.auth.hashers import make_password
-from authenticate.producer import send_message
 from rest_framework_simplejwt.tokens import RefreshToken
 
 
@@ -29,18 +26,6 @@ def unique_email(email):
   """
   res = User.objects.filter(email = email) # Get the Email from the User table. 
   return res
-
-
-# generate token using simple jwt token 
-def get_tokens_for_user(user):
-    """
-    :return: refresh and access token generate when the user hit the login api.
-    """
-    refresh = RefreshToken.for_user(user) # Give the refresh token for the user
-    return {
-        'refresh_token': str(refresh),
-        'access_token': str(refresh.access_token),
-    }
 
 
 class UserRegistrationView(GenericAPIView):
@@ -76,7 +61,7 @@ class UserRegistrationView(GenericAPIView):
         email_from = EMAIL_FROM
         recipient_list = [email]
         send_mail( subject, message, email_from, recipient_list)
-        return Response({'msg':'Registration Successfull, A OTP Verification code has been send to your Email'}, status = 201)
+        return Response({'msg':'Registration Successfull, A OTP Verification code has been send to your Email'}, status = status.HTTP_201_CREATED)
 
 
 class VerifyOtp(GenericAPIView):
@@ -98,10 +83,10 @@ class VerifyOtp(GenericAPIView):
       if new_time>= now:
           if str(res[0]['user_id'])==user and res[0]['auth_token']==auth_token:
             res.update(is_verified=True)
-            return Response({"status": "Otp Verified"}, status = 200)
-          return Response({"status": "Otp Incorrect"}, status = 400)
-      return Response({"status": "Verification OTP Expired"}, status = 400)
-    return Response({"status": "No user found"}, status = 400)
+            return Response({"status": "Otp Verified"}, status = status.HTTP_200_OK)
+          return Response({"status": "Otp Incorrect"}, status = status.HTTP_404_NOT_FOUND)
+      return Response({"status": "Verification OTP Expired"}, status = status.HTTP_408_REQUEST_TIMEOUT)
+    return Response({"status": "No user found"}, status = status.HTTP_404_NOT_FOUND)
 
 
 class VerifyEmailOtpSecondTime(GenericAPIView):
@@ -127,48 +112,35 @@ class VerifyEmailOtpSecondTime(GenericAPIView):
       profile.auth_token=otp
       profile.created_at=datetime.datetime.now(timezone.utc)
       profile.save()
-      return Response({'msg':' A Verification code has been send to your Email'}, status = 201)
-    return Response({'msg':"Email Doesn't exists"}, status = 204)
-
-
-
+      return Response({'msg':' A Verification code has been send to your Email'}, status = status.HTTP_200_OK)
+    return Response({'msg':"Email Doesn't exists"}, status==status.HTTP_404_NOT_FOUND)
 
 class UserLoginView(GenericAPIView):
+    serializer_class = UserLoginSerializer
     def post(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password')
-        if not email or not password:
-            return Response({"msg": "Email Password Incorrect"}, status=status.HTTP_400_BAD_REQUEST)
-
-        user = User.objects.filter(email=email).first()
-        if user and not user.is_superuser:
-            try:
-                res = Profile.objects.get(user=user)
-            except:
-                return Response({'msg': 'Please continue with google to login'})
-
-            if res and not res.is_verified:
-                return Response({'msg': 'email not verified'})
-
-            user = authenticate(username=email, password=password)
-            if user is not None:
-                refresh = RefreshToken.for_user(user) # Generate a new refresh token
-                access = refresh.access_token # Extract the access token from the refresh token
-
-                response_data = {
-                    'msg': 'Token Generated',
-                    'access_token': str(access), # Convert the token to a string before adding it to the dictionary
-                }
-                return Response(response_data, status=status.HTTP_200_OK)
-            else:
-                return Response({'errors': {'non_field_errors': ['email or Password is not Valid']}}, status=status.HTTP_404_NOT_FOUND)
+      email = request.data.get('email')
+      password = request.data.get('password')
+      if not email or not password:
+        return Response({"msg": "Email Password Incorrect"}, status=status.HTTP_400_BAD_REQUEST)
+      user = User.objects.filter(email=email).first()
+      if user and not user.is_superuser:
+        try:
+            res = Profile.objects.get(user=user)
+        except:
+            return Response({'msg': 'Please continue with google to login'})
+        if res and not res.is_verified:
+            return Response({'msg': 'email not verified'})
+        user = authenticate(username=email, password=password)
+        if user is not None:
+            refresh = RefreshToken.for_user(user) # Generate a new refresh token
+            access = refresh.access_token # Extract the access token from the refresh token
+            response_data = {
+                'msg': 'Token Generated',
+                'access_token': str(access), # Convert the token to a string before adding it to the dictionary
+                'refresh_token':str(refresh)
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
         else:
-            return Response({'msg': 'Unauthorized'}, status=401)
-
-class TokenUserGet(GenericAPIView):
-   serializer_class = TokenSerializer
-   def get(self,request):
-      user = self.request.user
-      token = TokenUser.objects.get(user=user)
-      serializer = TokenSerializer(token)
-      return Response({'msg':"success",'data':serializer.data}, status = 204)
+            return Response({'errors': {'non_field_errors': ['email or Password is not Valid']}}, status=status.HTTP_404_NOT_FOUND)
+      else:
+          return Response({'msg': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
